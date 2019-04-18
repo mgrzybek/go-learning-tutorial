@@ -59,8 +59,11 @@ func getArtifact(url string, id *uint) []byte {
 	return getURL(fmt.Sprintf("%v/%v", url, *id))
 }
 
-func mergePostUser() {
-
+func mergePostUser(posts *[]Post, ptrCache *UserCache) {
+	for _, post := range *posts {
+		user := getUser(ptrCache, post.UserID)
+		fmt.Printf("Post: %v - User: %v\n", post.ID, user.Name)
+	}
 }
 
 // Si len == 0, alors on fait un tableau dynamique
@@ -114,6 +117,14 @@ func init() {
 	flag.Parse()
 }
 
+func runTimedFunc(f func(posts *[]Post, ptrCache *UserCache), posts *[]Post, ptrCache *UserCache) time.Duration {
+	start := time.Now()
+	f(posts, ptrCache)
+	t := time.Now()
+
+	return t.Sub(start)
+}
+
 func main() {
 	var userCache UserCache
 	var ptrCache *UserCache
@@ -137,12 +148,6 @@ func main() {
 	// Pour chaque post :
 	// - on récupère les informations de l'utilisateur
 	// - on joint l'id du post et de l'utilisateur
-	start := time.Now()
-	for _, post := range posts {
-		user := getUser(ptrCache, post.UserID)
-		fmt.Printf("Post: %v - User: %v\n", post.ID, user.Name)
-	}
-	t := time.Now()
-	elapsed := t.Sub(start)
+	elapsed := runTimedFunc(mergePostUser, &posts, ptrCache)
 	fmt.Println("Duration:", elapsed)
 }
