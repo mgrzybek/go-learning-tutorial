@@ -2,14 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
-// go routine pour récupérer les info de https://jsonplaceholder.typicode.com/photos
-
-// channel pour
+var (
+	useCache *string
+)
 
 const (
 	USER_API_ENDPOINT = "https://jsonplaceholder.typicode.com/users"
@@ -27,6 +29,8 @@ type User struct {
 	ID                    uint
 	Name, Username, Email string
 }
+
+type UserCache map[uint]User
 
 func checkError(e error) {
 	if e != nil {
@@ -71,7 +75,7 @@ func getPosts() []Post {
 }
 
 func getPostsNumber() uint {
-	return uint(len(getPosts(0)))
+	return uint(len(getPosts()))
 }
 
 func json2user(input []byte) User {
@@ -88,38 +92,57 @@ func json2post(input []byte) Post {
 	return result
 }
 
-func getUser(id uint) User {
-	var cache map[uint]User
-
-	if user, ok := cache[id]; ok {
+func getUser(cache *UserCache, id uint) User {
+	if cache == nil {
+		return json2user(getArtifact(USER_API_ENDPOINT, &id))
+	}
+	if user, ok := (*cache)[id]; ok {
+		//log.Printf("User cache HIT: %v", id)
 		return user
 	} else {
-		return func() {
-			// Appel à l'API
-			user := json2user(getArtifact(USER_API_ENDPOINT, id))
-			// Mise à jour du cache
-			cache[id] = user
-
-			return user
-		}(id)
+		//log.Printf("User cache MISS: %v", id)
+		// Appel à l'API
+		// Mise à jour du cache
+		(*cache)[id] = json2user(getArtifact(USER_API_ENDPOINT, &id))
+		return (*cache)[id]
 	}
 }
 
+// On gère les options au lancement du programme
+func init() {
+	useCache = flag.String("cache", "true", "Use User cache")
+	flag.Parse()
+}
+
 func main() {
+	var userCache UserCache
+	var ptrCache *UserCache
+
+	if *useCache == "true" {
+		ptrCache = &userCache
+		userCache = make(UserCache)
+	} else {
+		ptrCache = nil
+	}
 	//var i uint = 1
 	//fmt.Println(json2user(getArtifact(USER_API_ENDPOINT, &i)))
 	//fmt.Println(json2post(getArtifact(POST_API_ENDPOINT, &i)))
 
 	// On récupère le nombre de posts pour créer un tableau de taille fixe
-	var postsNumber uint = getPostsNumber()
+	//var postsNumber uint = getPostsNumber()
 
 	// On récupère les posts
 	posts := getPosts()
+
 	// Pour chaque post :
 	// - on récupère les informations de l'utilisateur
 	// - on joint l'id du post et de l'utilisateur
-
-	for post := range posts {
-		user := json2user(getArtifact(USER_API_ENDPOINT, post.UserID))
+	start := time.Now()
+	for _, post := range posts {
+		user := getUser(ptrCache, post.UserID)
+		fmt.Printf("Post: %v - User: %v\n", post.ID, user.Name)
 	}
+	t := time.Now()
+	elapsed := t.Sub(start)
+	fmt.Println("Duration:", elapsed)
 }
